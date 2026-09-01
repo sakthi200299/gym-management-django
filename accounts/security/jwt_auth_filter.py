@@ -2,6 +2,7 @@ import json
 from django.http import JsonResponse
 from .jwt_handler import validate_token, extract_username, generate_token
 
+
 PUBLIC_ROUTES = [
     "/api/gym/users/",
 ]
@@ -23,7 +24,7 @@ class JwtAuthFilter:
 
         token = self._extract_token(request)
         if not token:
-            return JsonResponse({"error": "Authorization header missing"}, status=401)
+            return JsonResponse({"error": "Authorization missing from the header"}, status=401)
 
         try:
             username = extract_username(token)
