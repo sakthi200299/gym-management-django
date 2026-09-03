@@ -1,0 +1,274 @@
+Django Auth Service — Complete Workflow Document
+================================================
+
+
+1. Server Startup Flow
+----------------------
+
+python manage.py runserver
+        |
+manage.py
+        |
+wsgi.py
+    -> loads config.settings
+        |
+settings.py
+    -> INSTALLED_APPS   — registers all 6 modules
+    -> DATABASES        — connects PostgreSQL (gym_db)
+    -> MIDDLEWARE       — registers SecurityConfig
+        |
+config/urls.py
+    -> /health/
+    -> /api/gym/users/           (include users.urls)
+    -> /api/gym/plans/           (include plans.urls)
+    -> /api/gym/trainers/        (include trainers.urls)
+    -> /api/gym/subscriptions/   (include subscriptions.urls)
+    -> /api/gym/exercises/       (include exercises.urls)
+        |
+WSGI Server UP
+"Starting development server at http://127.0.0.1:8000/"
+
+When we run python manage.py runserver, Django starts the WSGI server which loads settings.py
+to configure all apps, database and middleware. Then urls.py registers all API routes and the
+server is ready to accept requests.
+
+
+2. Register Flow (Public)
+--------------------------
+
+POST /api/gym/users/
+        |
+SecurityConfig
+    -> csrf disabled
+    -> is public route? YES -> skip JwtAuthFilter
+        |
+UserController.post()
+        |
+UserService.register_user()
+    -> validate all fields
+    -> check username/email exists
+    -> hash password (SHA256)
+        |
+UserRepository.save()
+        |
+PostgreSQL users_user table
+        |
+Response 201: { "message": "User registered successfully" }
+
+Register is a public route defined in PUBLIC_ROUTES so SecurityConfig allows it to pass
+directly to the controller without going through JwtAuthFilter. No token is required for
+registration.
+
+
+3. Login Flow (Public)
+-----------------------
+
+POST /api/gym/users/login/
+Body: { "username": "sakthi", "password": "sakthi123" }
+        |
+SecurityConfig
+    -> csrf disabled
+    -> is public route? YES -> skip JwtAuthFilter
+        |
+AuthController.post()
+        |
+AuthService.login()
+        |
+UserService.load_user()
+    -> find user by username in DB
+    -> hash input password (SHA256)
+    -> compare with stored password_hash
+    -> match?    -> proceed
+    -> no match? -> 401 Invalid credentials
+        |
+UserRolePermission.objects.filter(user_id=3)
+    -> get role = "ADMIN"
+    -> get permissions = ["CREATE_USER", "GET_ALL_USERS", ...]
+        |
+jwt_handler.generate_token(username, user_id)
+    -> payload = { sub: "sakthi", user_id: 3, iat: ..., exp: ... }
+    -> signed with SECRET_KEY (HS256)
+        |
+Response 200:
+{
+    "token": "eyJhbGci...",
+    "role": "ADMIN",
+    "permissions": ["CREATE_USER", "GET_ALL_USERS", ...]
+}
+
+Login is a public route so it skips JwtAuthFilter. After verifying the password, the system
+fetches the user's role and permissions from accounts_userrolepermission table, generates a
+JWT token containing username and user_id signed with SECRET_KEY and returns it to the client.
+
+
+4. Protected API Flow
+----------------------
+
+GET /api/gym/users/
+Header: Authorization: Bearer eyJhbGci...
+        |
+SecurityConfig
+    -> csrf disabled
+    -> is public route? NO -> call JwtAuthFilter
+        |
+JwtAuthFilter.__call__()        (OncePerRequestFilter equivalent)
+
+    STEP 1 — Extract Token
+    -> reads Authorization header
+    -> removes "Bearer " prefix
+    -> returns raw token string
+
+    STEP 2 — Validate Token
+    -> jwt.decode(token, SECRET_KEY)
+    -> checks expiry
+    -> returns payload = { sub: "sakthi", user_id: 3 }
+
+    STEP 3 — Attach User to Request
+    -> request.auth_user = { "username": "sakthi", "user_id": 3 }
+        |
+@preauthorize("GET_ALL_USERS")   (@PreAuthorize equivalent)
+    -> user_id = request.auth_user["user_id"] -> 3
+    -> SELECT FROM accounts_userrolepermission
+       WHERE user_id = 3
+       AND permission = "GET_ALL_USERS"
+    -> exists? YES -> allow
+    -> exists? NO  -> 403 Access Denied
+        |
+UserController.get()
+        |
+UserService.get_all_users()
+        |
+UserRepository.find_all()
+        |
+PostgreSQL users_user table
+        |
+Response 200: { "users": [...] }
+
+Every protected API request must carry a JWT token in the Authorization header. JwtAuthFilter
+extracts and validates the token then attaches username and user_id to request.auth_user. Then
+@preauthorize checks if the user has the required permission in accounts_userrolepermission
+table before allowing access to the controller.
+
+
+5. Module Relations & Request Response
+---------------------------------------
+
+Plans — Admin creates gym plans
+--------------------------------
+POST /api/gym/plans/
+Request:
+{
+    "name": "Gold Plan",
+    "price": 1500.00,
+    "duration": "3 months",
+    "description": "Full access to gym"
+}
+Response 201:
+{
+    "message": "Plan created successfully",
+    "plan": { "id": 1, "name": "Gold Plan", "price": 1500.00, "duration": "3 months" }
+}
+
+Admin creates gym plans with name, price, duration and description. Users can subscribe
+to these plans.
+
+
+Trainers — Admin adds trainers
+--------------------------------
+POST /api/gym/trainers/
+Request:
+{
+    "name": "John",
+    "email": "john@gmail.com",
+    "phone": "9876543210",
+    "specialization": "Cardio",
+    "experience_years": 5
+}
+Response 201:
+{
+    "message": "Trainer created successfully",
+    "trainer": { "id": 1, "name": "John", "specialization": "Cardio" }
+}
+
+Admin adds trainers with their specialization and experience. Trainers are assigned to
+exercises for subscribed users.
+
+
+Subscriptions — User subscribes to a plan
+------------------------------------------
+POST /api/gym/subscriptions/
+Request:
+{
+    "user_id": 3,
+    "plan_id": 1,
+    "start_date": "2026-09-02",
+    "end_date": "2026-12-02",
+    "status": "active"
+}
+Response 201:
+{
+    "message": "Subscription created successfully",
+    "subscription": { "id": 1, "user_id": 3, "plan_id": 1, "status": "active" }
+}
+
+User subscribes to a gym plan with a start and end date. Subscription links the user and
+the plan together and has an active or inactive status.
+
+
+Exercises — Trainer assigns exercises to subscription
+------------------------------------------------------
+POST /api/gym/exercises/
+Request:
+{
+    "name": "Push Up",
+    "category": "Strength",
+    "sets": 3,
+    "reps": 15,
+    "duration_minutes": 30,
+    "trainer_id": 1,
+    "subscription_id": 1
+}
+Response 201:
+{
+    "message": "Exercise created successfully",
+    "exercise": { "id": 1, "name": "Push Up", "category": "Strength", "trainer_id": 1 }
+}
+
+Trainer assigns exercises to a subscribed user. Exercise links the trainer and the
+subscription together with details like sets, reps and duration.
+
+
+6. Module Relation
+-------------------
+
+User ──────────────┐
+                   |
+Plan ──────────> Subscription
+                   |
+Trainer ───────> Exercise
+
+User and Plan come together in Subscription. Trainer assigns Exercises to that Subscription.
+This is the core business flow of the gym management system.
+
+
+7. Spring Boot vs Django Mapping
+----------------------------------
+
+Spring Boot                     Django
+-----------                     ------
+mvn spring-boot:run          -> python manage.py runserver
+application.properties       -> settings.py
+pom.xml                      -> requirements.txt
+Tomcat                       -> WSGI
+SecurityFilterChain          -> MIDDLEWARE list
+SecurityConfig.java          -> security_config.py
+OncePerRequestFilter         -> jwt_auth_filter.py
+JwtUtil.java                 -> jwt_handler.py
+AuthController.java          -> auth_controller.py
+@PreAuthorize                -> @preauthorize decorator
+SecurityContextHolder        -> request.auth_user
+JpaRepository                -> Model.objects
+
+
+Prepared by: Sakthivel R
+Date: 02/Sep/2026
