@@ -10,9 +10,11 @@ class User(models.Model):
     age = models.IntegerField()
     gender = models.CharField(max_length=10, choices=[('Male', 'Male'), ('Female', 'Female')])
     joined_date = models.DateField(auto_now_add=True)
+    tenant_id = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         app_label = 'users'
+        ordering = ['-id']
 
     def __str__(self):
         return self.name

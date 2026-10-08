@@ -14,6 +14,7 @@ class Exercise(models.Model):
 
     class Meta:
         app_label = 'exercises'
+        ordering = ['-id']
 
     def __str__(self):
         return self.name

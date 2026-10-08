@@ -1,7 +1,7 @@
 from django.urls import path
-from subscriptions.controller.subscription_controller import SubscriptionController, SubscriptionDetailController
+from subscriptions.controller.subscription_view import SubscriptionView, SubscriptionDetailView
 
 urlpatterns = [
-    path("", SubscriptionController.as_view()),
-    path("<int:sub_id>/", SubscriptionDetailController.as_view()),
+    path("", SubscriptionView.as_view()),
+    path("<int:sub_id>/", SubscriptionDetailView.as_view()),
 ]

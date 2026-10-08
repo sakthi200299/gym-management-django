@@ -1,7 +1,7 @@
 from django.urls import path
-from exercises.controller.exercise_controller import ExerciseController, ExerciseDetailController
+from exercises.controller.exercise_view import ExerciseView, ExerciseDetailView
 
 urlpatterns = [
-    path("", ExerciseController.as_view()),
-    path("<int:exercise_id>/", ExerciseDetailController.as_view()),
+    path("", ExerciseView.as_view()),
+    path("<int:exercise_id>/", ExerciseDetailView.as_view()),
 ]

@@ -10,6 +10,7 @@ class Trainer(models.Model):
 
     class Meta:
         app_label = 'trainers'
+        ordering = ['-id']
 
     def __str__(self):
         return self.name

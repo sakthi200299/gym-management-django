@@ -1,0 +1,169 @@
+Django Auth Service — Gaps Document
+=====================================
+
+
+1. SECRET_KEY hardcoded in settings.py — Critical
+--------------------------------------------------
+BEFORE:
+    SECRET_KEY = 'django-insecure-c7&%(5@5#cap...'
+
+AFTER:
+    Should be in .env file, not in source code.
+    SECRET_KEY = os.environ.get("SECRET_KEY")
+
+
+2. DB Password hardcoded in settings.py — Critical
+---------------------------------------------------
+BEFORE:
+    'PASSWORD': 'edgedata360',
+
+AFTER:
+    Should be in .env file.
+    'PASSWORD': os.environ.get("DB_PASSWORD")
+
+
+3. No global Exception Handler — Gap
+--------------------------------------
+Every controller has its own try/except.
+Should have a centralized error handler middleware
+like Spring Boot's @ControllerAdvice.
+
+
+5. Health Check returns only {"status": "UP"} — Gap
+-----------------------------------------------------
+BEFORE:
+    return JsonResponse({"status": "UP"})
+
+AFTER:
+    Should also return DB connection status.
+    return JsonResponse({"status": "UP", "database": "UP"})
+
+
+6. No HTTP status code on login success — Minor Gap
+----------------------------------------------------
+BEFORE:
+    return JsonResponse(result)
+
+AFTER:
+    return JsonResponse(result, status=200)
+
+
+7. preauthorize wrapper missing functools.wraps — Gap
+------------------------------------------------------
+BEFORE:
+    def wrapper(self, request, *args, **kwargs):
+
+AFTER:
+    @functools.wraps(view_func)
+    def wrapper(self, request, *args, **kwargs):
+
+
+8. UserRolePermission.user is null=True — Gap
+----------------------------------------------
+BEFORE:
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
+
+AFTER:
+    A permission without a user makes no sense.
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=False)
+
+
+9. No .env file / python-dotenv in requirements.txt — Gap
+----------------------------------------------------------
+SECRET_KEY and DB_PASSWORD should be loaded from environment variables.
+Add to requirements.txt:
+    python-dotenv==1.0.0
+
+
+
+
+
+10. Delete method missing for Subscription and Exercise — Gap
+--------------------------------------------------------------
+BEFORE:
+    No delete() method in SubscriptionDetailController
+    No delete() method in ExerciseDetailController
+
+AFTER:
+    SubscriptionDetailController.delete() -> delete_subscription(sub_id)
+    ExerciseDetailController.delete()     -> delete_exercise(exercise_id)
+
+    Flow:
+    DELETE /api/gym/subscriptions/<sub_id>/
+        |
+    @preauthorize("DELETE_SUBSCRIPTION")
+        |
+    SubscriptionService.delete_subscription(sub_id)
+        |
+    SubscriptionRepository.delete(sub)
+        |
+    Response 200: { "message": "Subscription deleted successfully" }
+
+    DELETE /api/gym/exercises/<exercise_id>/
+        |
+    @preauthorize("DELETE_EXERCISE")
+        |
+    ExerciseService.delete_exercise(exercise_id)
+        |
+    ExerciseRepository.delete(exercise)
+        |
+    Response 200: { "message": "Exercise deleted successfully" }
+
+
+11. No @transaction.atomic on write methods — Gap
+--------------------------------------------------
+Equivalent to Spring Boot's @Transactional.
+If DB operation fails midway — auto rollback.
+
+BEFORE:
+    def register_user(dto):       # no transaction
+    def create_subscription(dto): # no transaction
+    def create_exercise(dto):     # no transaction
+
+AFTER:
+    from django.db import transaction
+
+    user_service:
+        @transaction.atomic
+        def register_user(dto)
+        @transaction.atomic
+        def update_user(user_id, dto)
+
+    plan_service:
+        @transaction.atomic
+        def create_plan(dto)
+        @transaction.atomic
+        def update_plan(plan_id, dto)
+
+    trainer_service:
+        @transaction.atomic
+        def create_trainer(dto)
+        @transaction.atomic
+        def update_trainer(trainer_id, dto)
+
+    subscription_service:
+        @transaction.atomic
+        def create_subscription(dto)
+        @transaction.atomic
+        def update_subscription(sub_id, dto)
+        @transaction.atomic
+        def delete_subscription(sub_id)
+
+    exercise_service:
+        @transaction.atomic
+        def create_exercise(dto)
+        @transaction.atomic
+        def update_exercise(exercise_id, dto)
+        @transaction.atomic
+        def delete_exercise(exercise_id)
+
+
+12. No ordering in Meta class — Gap
+-------------------------------------
+
+    class Meta:
+        app_label = 'users'
+        ordering = ['-id']  # latest record first — ORDER BY id DESC
+
+Applied to all 5 models:
+    User, Plan, Trainer, Subscription, Exercise

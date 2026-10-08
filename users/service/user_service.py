@@ -1,9 +1,14 @@
 import hashlib
 
-from users.repository import user_repository
-from users.dto.user_request_dto import UserRequestDTO
-from users.mapper.user_mapper import UserMapper
+from django.db import transaction
 
+from users.repository import user_repository
+from users.serializer.user_serializer import UserSerializer
+from accounts.security.otp import otp_repository
+from accounts.security.otp.otp_purpose import OtpPurpose
+from accounts.security.email.email_service import generate_otp, send_otp_email
+from django.utils import timezone
+from datetime import timedelta
 
 def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -13,61 +18,57 @@ def _check_password(raw: str, hashed: str) -> bool:
     return _hash_password(raw) == hashed
 
 
-def register_user(dto: UserRequestDTO) -> dict:
-    if not dto.username:
-        raise ValueError("Username is required")
-    if not dto.password:
-        raise ValueError("Password is required")
-    if not dto.name:
-        raise ValueError("Name is required")
-    if not dto.email:
-        raise ValueError("Email is required")
-    if not dto.phone:
-        raise ValueError("Phone is required")
-    if not dto.age:
-        raise ValueError("Age is required")
-    if not dto.gender:
-        raise ValueError("Gender is required")
-    if user_repository.exists_by_username(dto.username):
+@transaction.atomic
+def register_user(data: dict) -> dict:
+    if user_repository.exists_by_username(data.get("username")):
         raise ValueError("Username already exists")
-    if user_repository.exists_by_email(dto.email):
-        raise ValueError(f"Email '{dto.email}' already exists")
-    user = user_repository.save(UserMapper.to_entity(dto))
-    return UserMapper.to_response_dto(user).to_dict()
+    if user_repository.exists_by_email(data.get("email")):
+        raise ValueError(f"Email '{data.get('email')}' already exists")
+    password_hash = _hash_password(data.get("password"))
+    user = user_repository.save({
+        **{k: v for k, v in data.items() if k != 'password'},
+        "password_hash": password_hash,
+    })
+    return UserSerializer(user).data
 
 
-def update_user(user_id: int, dto: UserRequestDTO) -> dict:
+@transaction.atomic
+def update_user(user_id: int, data: dict) -> dict:
     user = user_repository.find_by_id(user_id)
     if not user:
         raise ValueError(f"User with id {user_id} not found")
-    data = UserMapper.to_entity(dto)
-    user = user_repository.update(user, data)
-    return UserMapper.to_response_dto(user).to_dict()
+    user = user_repository.update(user, {k: v for k, v in data.items() if k != 'password'})
+    return UserSerializer(user).data
 
 
 def load_user(username: str, password: str) -> dict:
     user = user_repository.find_by_username(username)
     if not user or not _check_password(password, user.password_hash):
         raise ValueError("Invalid username or password")
-    return {"username": user.username, "email": user.email}
-
-
-def get_user_by_username(username: str) -> dict | None:
-    user = user_repository.find_by_username(username)
-    if not user:
-        return None
-    return {"username": user.username, "email": user.email}
+    return {"id": user.id, "username": user.username, "email": user.email}
 
 
 def get_all_users() -> list:
     users = user_repository.find_all_objects()
     if not users:
         raise ValueError("No users found")
-    return UserMapper.to_response_dto_list(users)
+    return UserSerializer(users, many=True).data
 
 
 def get_user_by_id(user_id: int) -> dict:
     user = user_repository.find_by_id(user_id)
     if not user:
         raise ValueError(f"User with id {user_id} not found")
-    return UserMapper.to_response_dto(user).to_dict()
+    return UserSerializer(user).data
+
+
+def reset_password(data: dict) -> dict:
+    user = user_repository.find_by_id(data['user_id'])
+    if not user:
+        raise ValueError("User not found")
+    user_repository.update(user, {"password_hash": _hash_password(data['new_password'])})
+    otp = generate_otp()
+    otp_expiry = timezone.now() + timedelta(minutes=5)
+    otp_repository.save(user.id, otp, otp_expiry, OtpPurpose.LOGIN)
+    send_otp_email(user.email, otp, user.name)
+    return {"message": "Password reset successful. OTP sent to your email."}

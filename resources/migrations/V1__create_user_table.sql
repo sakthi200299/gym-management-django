@@ -7,5 +7,6 @@ CREATE TABLE IF NOT EXISTS users_user (
     phone         VARCHAR(15)  NOT NULL,
     age           INTEGER      NOT NULL,
     gender        VARCHAR(10)  NOT NULL,
-    joined_date   DATE         NOT NULL
+    joined_date   DATE         NOT NULL,
+    tenant_id     VARCHAR(50)  NOT NULL DEFAULT ''
 );

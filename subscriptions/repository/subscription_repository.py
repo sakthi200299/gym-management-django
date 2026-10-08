@@ -24,3 +24,7 @@ def find_by_id(sub_id: int) -> Subscription | None:
 
 def exists_by_user(user_id: int) -> bool:
     return Subscription.objects.filter(user_id=user_id, status='active').exists()
+
+
+def delete(sub: Subscription) -> None:
+    sub.delete()

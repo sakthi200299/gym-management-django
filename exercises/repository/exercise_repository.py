@@ -24,3 +24,7 @@ def find_by_id(exercise_id: int) -> Exercise | None:
 
 def exists_by_name_and_subscription(name: str, subscription_id: int) -> bool:
     return Exercise.objects.filter(name=name, subscription_id=subscription_id).exists()
+
+
+def delete(exercise: Exercise) -> None:
+    exercise.delete()
