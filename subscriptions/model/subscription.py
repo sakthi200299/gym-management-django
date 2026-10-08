@@ -14,6 +14,7 @@ class Subscription(models.Model):
 
     class Meta:
         app_label = 'subscriptions'
+        ordering = ['-id']
 
     def __str__(self):
         return f"{self.user.name} - {self.plan.name}"

@@ -1,7 +1,7 @@
 from django.urls import path
-from plans.controller.plan_controller import PlanController, PlanDetailController
+from plans.controller.plan_view import PlanView, PlanDetailView
 
 urlpatterns = [
-    path("", PlanController.as_view()),
-    path("<int:plan_id>/", PlanDetailController.as_view()),
+    path("", PlanView.as_view()),
+    path("<int:plan_id>/", PlanDetailView.as_view()),
 ]

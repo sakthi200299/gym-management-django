@@ -208,7 +208,22 @@ Request:
 Response 201:
 {
     "message": "Subscription created successfully",
-    "subscription": { "id": 1, "user_id": 3, "plan_id": 1, "status": "active" }
+    "subscription": {
+        "id": 3,
+        "status": "active",
+        "start_date": "2026-01-01",
+        "end_date": "2026-02-01",
+        "user": {
+            "id": 3,
+            "name": "Sakthi",
+            "email": "sakthi@gmail.com"
+        },
+        "plan": {
+            "id": 2,
+            "name": "Advance plan",
+            "price": "129.99"
+        }
+    }
 }
 
 User subscribes to a gym plan with a start and end date. Subscription links the user and
@@ -231,7 +246,31 @@ Request:
 Response 201:
 {
     "message": "Exercise created successfully",
-    "exercise": { "id": 1, "name": "Push Up", "category": "Strength", "trainer_id": 1 }
+    "exercise": {
+        "id": 3,
+        "name": "Push Up",
+        "category": "Strength",
+        "sets": 3,
+        "reps": 15,
+        "duration_minutes": 20,
+        "trainer": {
+            "id": 2,
+            "name": "Will Smith",
+            "specialization": "Athete"
+        },
+        "subscription": {
+            "id": 2,
+            "status": "active",
+            "user": {
+                "id": 2,
+                "name": "arun Doe"
+            },
+            "plan": {
+                "id": 1,
+                "name": "Basic Updated"
+            }
+        }
+    }
 }
 
 Trainer assigns exercises to a subscribed user. Exercise links the trainer and the
@@ -251,24 +290,3 @@ User and Plan come together in Subscription. Trainer assigns Exercises to that S
 This is the core business flow of the gym management system.
 
 
-7. Spring Boot vs Django Mapping
-----------------------------------
-
-Spring Boot                     Django
------------                     ------
-mvn spring-boot:run          -> python manage.py runserver
-application.properties       -> settings.py
-pom.xml                      -> requirements.txt
-Tomcat                       -> WSGI
-SecurityFilterChain          -> MIDDLEWARE list
-SecurityConfig.java          -> security_config.py
-OncePerRequestFilter         -> jwt_auth_filter.py
-JwtUtil.java                 -> jwt_handler.py
-AuthController.java          -> auth_controller.py
-@PreAuthorize                -> @preauthorize decorator
-SecurityContextHolder        -> request.auth_user
-JpaRepository                -> Model.objects
-
-
-Prepared by: Sakthivel R
-Date: 02/Sep/2026

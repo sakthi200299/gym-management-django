@@ -1,40 +1,43 @@
+from django.db import transaction
+
 from plans.repository import plan_repository
-from plans.dto.plan_request_dto import PlanRequestDTO
-from plans.mapper.plan_mapper import PlanMapper
+from plans.serializer.plan_serializer import PlanSerializer
+from config.cache_service import get_cached_plans, set_cached_plans, evict_plans_cache
 
 
-def create_plan(dto: PlanRequestDTO) -> dict:
-    if not dto.name:
-        raise ValueError("Name is required")
-    if not dto.price:
-        raise ValueError("Price is required")
-    if not dto.duration:
-        raise ValueError("Duration is required")
-    if not dto.description:
-        raise ValueError("Description is required")
-    if plan_repository.exists_by_name(dto.name):
-        raise ValueError(f"Plan '{dto.name}' already exists")
-    plan = plan_repository.save(PlanMapper.to_entity(dto))
-    return PlanMapper.to_response_dto(plan).to_dict()
+@transaction.atomic
+def create_plan(data: dict) -> dict:
+    if plan_repository.exists_by_name(data.get("name")):
+        raise ValueError(f"Plan '{data.get('name')}' already exists")
+    plan = plan_repository.save(data)
+    evict_plans_cache()                             # cache evict on create
+    return PlanSerializer(plan).data
 
 
-def update_plan(plan_id: int, dto: PlanRequestDTO) -> dict:
+@transaction.atomic
+def update_plan(plan_id: int, data: dict) -> dict:
     plan = plan_repository.find_by_id(plan_id)
     if not plan:
         raise ValueError(f"Plan with id {plan_id} not found")
-    plan = plan_repository.update(plan, PlanMapper.to_entity(dto))
-    return PlanMapper.to_response_dto(plan).to_dict()
+    plan = plan_repository.update(plan, data)
+    evict_plans_cache()                             # cache evict on update
+    return PlanSerializer(plan).data
 
 
 def get_all_plans() -> list:
+    cached = get_cached_plans()                     # L2 Redis check
+    if cached:
+        return cached                               # return from Redis — NO DB hit
     plans = plan_repository.find_all_objects()
     if not plans:
         raise ValueError("No plans found")
-    return PlanMapper.to_response_dto_list(plans)
+    data = PlanSerializer(plans, many=True).data
+    set_cached_plans(data)                          # store in Redis
+    return data
 
 
 def get_plan_by_id(plan_id: int) -> dict:
     plan = plan_repository.find_by_id(plan_id)
     if not plan:
         raise ValueError(f"Plan with id {plan_id} not found")
-    return PlanMapper.to_response_dto(plan).to_dict()
+    return PlanSerializer(plan).data
